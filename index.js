@@ -2,7 +2,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const P = require("pino");
 
 const NOMOR_WA = "6285770538628";
-const ADMIN_NUMBER = "6285770538628@s.whatsapp.net"; // nomor admin
+const ADMIN = "6285770538628@s.whatsapp.net";
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("session");
@@ -19,25 +19,20 @@ async function startBot() {
     if (connection === "open") {
       console.log("Bot terhubung!");
     }
-
     if (connection === "connecting") {
       if (!sock.authState.creds.registered) {
-        await new Promise(r => setTimeout(r, 60000));
+        await new Promise(function(r) { setTimeout(r, 60000); });
         try {
           const code = await sock.requestPairingCode(NOMOR_WA);
-          console.log("=================================");
-          console.log("PAIRING CODE KAMU:", code);
-          console.log("=================================");
+          console.log("PAIRING CODE: " + code);
         } catch (e) {
-          console.log("Gagal dapat pairing code:", e.message);
+          console.log("Error: " + e.message);
         }
       }
     }
-
     if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
+      const kode = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output ? lastDisconnect.error.output.statusCode : 0;
+      if (kode !== DisconnectReason.loggedOut) {
         startBot();
       }
     }
@@ -49,24 +44,41 @@ async function startBot() {
 
     const from = msg.key.remoteJid;
     const sender = msg.key.participant || msg.key.remoteJid;
-    const isAdmin = sender === ADMIN_NUMBER;
+    const isAdmin = sender === ADMIN;
+    const text = msg.message.conversation || msg.message.extendedTextMessage && msg.message.extendedTextMessage.text || "";
 
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text || "";
-
-    // Auto hapus link grup (semua orang)
     if (from.endsWith("@g.us") && text.includes("chat.whatsapp.com/")) {
       await sock.sendMessage(from, { delete: msg.key });
-      await sock.sendMessage(from, { text: "⚠️ Link grup dilarang!" });
+      await sock.sendMessage(from, { text: "Dilarang kirim link grup!" });
       return;
     }
 
-    // Command khusus admin saja
     if (!isAdmin) return;
 
-    // Command .kick
     if (text === ".kick") {
-      const quoted = msg.message.extendedTextMessage?.contextInfo?.participant;
-      if (!quoted) return sock.sendMessage(from, { text: "Tag/reply member yang mau di kick!" });
-      await sock.groupParticipantsUpdate(fro
+      const target = msg.message.extendedTextMessage && msg.message.extendedTextMessage.contextInfo && msg.message.extendedTextMessage.contextInfo.participant;
+      if (!target) {
+        await sock.sendMessage(from, { text: "Reply pesan member yang mau di kick!" });
+        return;
+      }
+      await sock.groupParticipantsUpdate(from, [target], "remove");
+      await sock.sendMessage(from, { text: "Member berhasil di kick!" });
+    }
+
+    if (text === ".tagall") {
+      const metadata = await sock.groupMetadata(from);
+      const members = metadata.participants.map(function(p) { return p.id; });
+      let mention = "";
+      for (let i = 0; i < members.length; i++) {
+        mention += "@" + members[i].split("@")[0] + "\n";
+      }
+      await sock.sendMessage(from, { text: mention, mentions: members });
+    }
+
+    if (text === ".info") {
+      await sock.sendMessage(from, { text: "Bot WA\n\nCommand:\n.kick - Kick member\n.tagall - Tag semua\n.info - Info bot" });
+    }
+  });
+}
+
+startBot();
