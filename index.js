@@ -3,6 +3,7 @@ const P = require("pino");
 
 const NOMOR_WA = "6285770538628";
 const ADMIN = "6285770538628@s.whatsapp.net";
+let pairingDone = false;
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("session");
@@ -15,15 +16,21 @@ async function startBot() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  if (!sock.authState.creds.registered) {
-    await new Promise(function(r) { setTimeout(r, 5000); });
-    const code = await sock.requestPairingCode(NOMOR_WA);
-    console.log("PAIRING CODE: " + code);
-  }
-
   sock.ev.on("connection.update", async function(update) {
-    const connection = update.connection;
-    const lastDisconnect = update.lastDisconnect;
+    const { connection, lastDisconnect, isNewLogin } = update;
+
+    if (connection === "connecting" && !pairingDone && !sock.authState.creds.registered) {
+      await new Promise(function(r) { setTimeout(r, 10000); });
+      try {
+        const code = await sock.requestPairingCode(NOMOR_WA);
+        pairingDone = true;
+        console.log("=============================");
+        console.log("PAIRING CODE: " + code);
+        console.log("=============================");
+      } catch(e) {
+        console.log("Coba lagi...");
+      }
+    }
 
     if (connection === "open") {
       console.log("Bot terhubung!");
@@ -32,6 +39,7 @@ async function startBot() {
     if (connection === "close") {
       const kode = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output ? lastDisconnect.error.output.statusCode : 0;
       if (kode !== DisconnectReason.loggedOut) {
+        pairingDone = false;
         startBot();
       }
     }
