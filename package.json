@@ -6,7 +6,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "6.5.0",
-    "pino": "^8.0.0"
+    "whatsapp-web.js": "latest",
+    "qrcode-terminal": "^0.12.0"
   }
 }
