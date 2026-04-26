@@ -21,7 +21,7 @@ async function startBot() {
 
     if (connection === "connecting") {
       if (!sock.authState.creds.registered) {
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 60000));
         try {
           const code = await sock.requestPairingCode(NOMOR_WA);
           console.log("=================================");
