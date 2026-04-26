@@ -1,6 +1,7 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
 const P = require("pino");
-const qrcode = require("qrcode-terminal");
+
+const NOMOR_WA = "6285770538628";
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("session");
@@ -12,11 +13,12 @@ async function startBot() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      qrcode.generate(qr, { small: true });
-      console.log("Scan QR pakai WhatsApp!");
-    }
+  if (!sock.authState.creds.registered) {
+    const code = await sock.requestPairingCode(NOMOR_WA);
+    console.log("Pairing Code kamu:", code);
+  }
+
+  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
     if (connection === "open") {
       console.log("Bot terhubung!");
     }
