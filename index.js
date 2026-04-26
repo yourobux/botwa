@@ -16,19 +16,22 @@ async function startBot() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  // Minta pairing code langsung
   if (!sock.authState.creds.registered) {
-    setTimeout(async function() {
+    // Minta kode baru tiap 2 menit
+    const minta = async function() {
       try {
         const code = await sock.requestPairingCode(NOMOR_WA);
         console.log("=============================");
         console.log("PAIRING CODE: " + code);
-        console.log("Masukkan kode ini di WA > Perangkat Tertaut");
+        console.log("Masukkan di WA > Perangkat Tertaut > Tautkan dengan nomor");
+        console.log("Kode baru dalam 2 menit jika belum dipakai");
         console.log("=============================");
       } catch(e) {
-        console.log("Error pairing: " + e.message);
+        console.log("Error: " + e.message);
       }
-    }, 3000);
+    };
+    setTimeout(minta, 3000);
+    setInterval(minta, 120000); // minta kode baru tiap 2 menit
   }
 
   sock.ev.on("connection.update", async function(update) {
