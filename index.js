@@ -2,6 +2,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const P = require("pino");
 
 const NOMOR_WA = "6285770538628";
+const ADMIN_NUMBER = "6285770538628@s.whatsapp.net"; // nomor admin
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("session");
@@ -14,7 +15,7 @@ async function startBot() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+  sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
     if (connection === "open") {
       console.log("Bot terhubung!");
     }
@@ -45,16 +46,27 @@ async function startBot() {
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const msg = messages[0];
     if (!msg.message) return;
+
     const from = msg.key.remoteJid;
-    if (!from.endsWith("@g.us")) return;
+    const sender = msg.key.participant || msg.key.remoteJid;
+    const isAdmin = sender === ADMIN_NUMBER;
+
     const text =
       msg.message.conversation ||
       msg.message.extendedTextMessage?.text || "";
-    if (text.includes("chat.whatsapp.com/")) {
+
+    // Auto hapus link grup (semua orang)
+    if (from.endsWith("@g.us") && text.includes("chat.whatsapp.com/")) {
       await sock.sendMessage(from, { delete: msg.key });
       await sock.sendMessage(from, { text: "⚠️ Link grup dilarang!" });
+      return;
     }
-  });
-}
 
-startBot();
+    // Command khusus admin saja
+    if (!isAdmin) return;
+
+    // Command .kick
+    if (text === ".kick") {
+      const quoted = msg.message.extendedTextMessage?.contextInfo?.participant;
+      if (!quoted) return sock.sendMessage(from, { text: "Tag/reply member yang mau di kick!" });
+      await sock.groupParticipantsUpdate(fro
