@@ -1,70 +1,54 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore } = require("@whiskeysockets/baileys");
-const P = require("pino");
-const NOMOR_WA = "6285770538628";
-const ADMIN = "6285770538628@s.whatsapp.net";
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode-terminal");
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("session");
-  const sock = makeWASocket({
-    logger: P({ level: "silent" }),
-    printQRInTerminal: false,
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, P({ level: "silent" }))
-    }
-  });
+const ADMIN = "6285770538628@c.us";
 
-  if (!sock.authState.creds.registered) {
-    setTimeout(async () => {
-      const code = await sock.requestPairingCode(NOMOR_WA);
-      console.log("PAIRING CODE: " + code);
-    }, 5000);
+const client = new Client({
+  authStrategy: new LocalAuth(),
+  puppeteer: { args: ["--no-sandbox"] }
+});
+
+client.on("qr", (qr) => {
+  qrcode.generate(qr, { small: true });
+  console.log("Scan QR di atas!");
+});
+
+client.on("ready", () => {
+  console.log("Bot terhubung!");
+});
+
+client.on("message", async (msg) => {
+  const from = msg.from;
+  const isGroup = from.endsWith("@g.us");
+  const isAdmin = msg.author === ADMIN || from === ADMIN;
+  const text = msg.body;
+
+  if (isGroup && text.includes("chat.whatsapp.com/")) {
+    await msg.delete(true);
+    await client.sendMessage(from, "⚠️ Dilarang kirim link grup!");
+    return;
   }
 
-  sock.ev.on("creds.update", saveCreds);
+  if (!isAdmin) return;
 
-  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
-    if (connection === "open") console.log("Bot terhubung!");
-    if (connection === "close") {
-      const code = lastDisconnect?.error?.output?.statusCode;
-      if (code !== DisconnectReason.loggedOut) startBot();
-    }
-  });
+  if (text === ".kick") {
+    const quoted = await msg.getQuotedMessage();
+    if (!quoted) return client.sendMessage(from, "Reply pesan member!");
+    const chat = await msg.getChat();
+    await chat.removeParticipants([quoted.author]);
+    await client.sendMessage(from, "✅ Member di kick!");
+  }
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message) return;
-    const from = msg.key.remoteJid;
-    const sender = msg.key.participant || msg.key.remoteJid;
-    const isAdmin = sender === ADMIN;
-    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+  if (text === ".tagall") {
+    const chat = await msg.getChat();
+    const members = chat.participants.map(p => p.id._serialized);
+    const teks = members.map(m => "@" + m.split("@")[0]).join("\n");
+    await client.sendMessage(from, teks, { mentions: members });
+  }
 
-    if (from.endsWith("@g.us") && text.includes("chat.whatsapp.com/")) {
-      await sock.sendMessage(from, { delete: msg.key });
-      await sock.sendMessage(from, { text: "⚠️ Dilarang kirim link grup!" });
-      return;
-    }
+  if (text === ".info") {
+    await client.sendMessage(from, "🤖 Bot WA\n\n.kick - Kick member\n.tagall - Tag semua\n.info - Info");
+  }
+});
 
-    if (!isAdmin) return;
-
-    if (text === ".kick") {
-      const target = msg.message.extendedTextMessage?.contextInfo?.participant;
-      if (!target) return sock.sendMessage(from, { text: "Reply pesan member!" });
-      await sock.groupParticipantsUpdate(from, [target], "remove");
-      await sock.sendMessage(from, { text: "✅ Member di kick!" });
-    }
-
-    if (text === ".tagall") {
-      const meta = await sock.groupMetadata(from);
-      const members = meta.participants.map(p => p.id);
-      const teks = members.map(m => "@" + m.split("@")[0]).join("\n");
-      await sock.sendMessage(from, { text: teks, mentions: members });
-    }
-
-    if (text === ".info") {
-      await sock.sendMessage(from, { text: "🤖 Bot WA\n\n.kick - Kick member\n.tagall - Tag semua\n.info - Info" });
-    }
-  });
-}
-
-startBot();
+client.initialize();
