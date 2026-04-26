@@ -8,20 +8,31 @@ async function startBot() {
 
   const sock = makeWASocket({
     logger: P({ level: "silent" }),
-    auth: state
+    auth: state,
+    browser: ["Bot", "Chrome", "1.0"]
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  if (!sock.authState.creds.registered) {
-    const code = await sock.requestPairingCode(NOMOR_WA);
-    console.log("Pairing Code kamu:", code);
-  }
-
-  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+  sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
     if (connection === "open") {
       console.log("Bot terhubung!");
     }
+
+    if (connection === "connecting") {
+      if (!sock.authState.creds.registered) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const code = await sock.requestPairingCode(NOMOR_WA);
+          console.log("=================================");
+          console.log("PAIRING CODE KAMU:", code);
+          console.log("=================================");
+        } catch (e) {
+          console.log("Gagal dapat pairing code:", e.message);
+        }
+      }
+    }
+
     if (connection === "close") {
       const shouldReconnect =
         lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
