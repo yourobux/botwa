@@ -10,26 +10,25 @@ async function startBot() {
   const sock = makeWASocket({
     logger: P({ level: "silent" }),
     auth: state,
-    browser: ["Bot", "Chrome", "1.0"]
+    browser: ["Ubuntu", "Chrome", "20.0.04"]
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
+  if (!sock.authState.creds.registered) {
+    await new Promise(function(r) { setTimeout(r, 5000); });
+    const code = await sock.requestPairingCode(NOMOR_WA);
+    console.log("PAIRING CODE: " + code);
+  }
+
+  sock.ev.on("connection.update", async function(update) {
+    const connection = update.connection;
+    const lastDisconnect = update.lastDisconnect;
+
     if (connection === "open") {
       console.log("Bot terhubung!");
     }
-    if (connection === "connecting") {
-      if (!sock.authState.creds.registered) {
-        await new Promise(function(r) { setTimeout(r, 60000); });
-        try {
-          const code = await sock.requestPairingCode(NOMOR_WA);
-          console.log("PAIRING CODE: " + code);
-        } catch (e) {
-          console.log("Error: " + e.message);
-        }
-      }
-    }
+
     if (connection === "close") {
       const kode = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output ? lastDisconnect.error.output.statusCode : 0;
       if (kode !== DisconnectReason.loggedOut) {
@@ -38,14 +37,14 @@ async function startBot() {
     }
   });
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
+  sock.ev.on("messages.upsert", async function(m) {
+    const msg = m.messages[0];
     if (!msg.message) return;
 
     const from = msg.key.remoteJid;
     const sender = msg.key.participant || msg.key.remoteJid;
     const isAdmin = sender === ADMIN;
-    const text = msg.message.conversation || msg.message.extendedTextMessage && msg.message.extendedTextMessage.text || "";
+    const text = msg.message.conversation || (msg.message.extendedTextMessage ? msg.message.extendedTextMessage.text : "") || "";
 
     if (from.endsWith("@g.us") && text.includes("chat.whatsapp.com/")) {
       await sock.sendMessage(from, { delete: msg.key });
@@ -56,7 +55,7 @@ async function startBot() {
     if (!isAdmin) return;
 
     if (text === ".kick") {
-      const target = msg.message.extendedTextMessage && msg.message.extendedTextMessage.contextInfo && msg.message.extendedTextMessage.contextInfo.participant;
+      const target = msg.message.extendedTextMessage && msg.message.extendedTextMessage.contextInfo ? msg.message.extendedTextMessage.contextInfo.participant : null;
       if (!target) {
         await sock.sendMessage(from, { text: "Reply pesan member yang mau di kick!" });
         return;
